@@ -4,10 +4,6 @@ from gi.repository import Gtk, GLib, Gdk
 
 from pathlib import Path
 
-# -------------------------
-# Configuration
-# -------------------------
-
 PROJECT_DIR = Path(__file__).resolve().parent
 ASSETS_DIR = PROJECT_DIR / "assets"
 
@@ -37,10 +33,6 @@ CONDITIONS = {
 }
 
 
-# -------------------------
-# RAM monitoring
-# -------------------------
-
 def get_ram_usage():
     """Return system RAM usage as a percentage."""
 
@@ -69,10 +61,6 @@ def get_condition(ram_percent):
         return "relaxed"
 
 
-# -------------------------
-# Wolfi application
-# -------------------------
-
 class Wolfi(Gtk.Application):
 
     def __init__(self):
@@ -88,7 +76,6 @@ class Wolfi(Gtk.Application):
 
     def do_activate(self):
 
-        # Load all animation images once
         for condition, filenames in CONDITIONS.items():
             self.textures[condition] = []
 
@@ -102,7 +89,6 @@ class Wolfi(Gtk.Application):
                 texture = Gdk.Texture.new_from_filename(str(path))
                 self.textures[condition].append(texture)
 
-        # Transparent widget styling
         css = Gtk.CssProvider()
         css.load_from_data(b"""
             window {
@@ -120,20 +106,44 @@ class Wolfi(Gtk.Application):
             Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION,
         )
 
-        # Create dog image
         self.image = Gtk.Picture()
         self.image.set_content_fit(Gtk.ContentFit.CONTAIN)
         self.image.set_can_shrink(True)
         self.image.set_size_request(DOG_SIZE, DOG_SIZE)
 
-        # Create window
         self.window = Gtk.ApplicationWindow(application=self)
         self.window.set_title("Wolfi")
         self.window.set_decorated(False)
         self.window.set_resizable(False)
-        self.window.set_child(self.image)
+        self.ram_label = Gtk.Label(label="RAM: --%")
+        self.ram_label.set_halign(Gtk.Align.CENTER)
+        self.ram_label.set_visible(False)
 
-        # Allow dragging Wolfi with the mouse
+        container = Gtk.Box(
+            orientation=Gtk.Orientation.VERTICAL,
+            spacing=4,
+        )
+        container.set_halign(Gtk.Align.CENTER)
+
+        container.append(self.ram_label)
+        container.append(self.image)
+
+        self.window.set_child(container)
+
+        hover = Gtk.EventControllerMotion()
+
+        def on_mouse_enter(controller, x, y):
+            self.ram_label.set_visible(True)
+            self.update_ram_label()
+
+        def on_mouse_leave(controller):
+            self.ram_label.set_visible(False)
+
+        hover.connect("enter", on_mouse_enter)
+        hover.connect("leave", on_mouse_leave)
+
+        container.add_controller(hover)
+
         drag = Gtk.GestureClick()
         drag.set_button(1)
 
@@ -163,10 +173,8 @@ class Wolfi(Gtk.Application):
 
         self.window.present()
 
-        # Initialize the correct condition
         self.update_condition()
 
-        # Start timers
         GLib.timeout_add(
             FRAME_INTERVAL_MS,
             self.advance_frame,
@@ -179,12 +187,15 @@ class Wolfi(Gtk.Application):
 
         print("Wolfi is running!")
 
+    def update_ram_label(self):
+        ram_percent = get_ram_usage()
+        self.ram_label.set_text(f"RAM: {ram_percent:.1f}%")
+
     def update_condition(self):
 
         ram_percent = get_ram_usage()
         condition = get_condition(ram_percent)
 
-        # Switch animation only if the condition changes
         if condition != self.current_condition:
             self.current_condition = condition
             self.frame_index = 0
